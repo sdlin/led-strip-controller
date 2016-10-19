@@ -95,13 +95,13 @@ def rgb_handler():
         )
 
 
-@app.route('/api/simple_on', methods=['POST'])
+@app.route('/api/simple_on', methods=['PUT', 'POST'])
 def simple_on_handler():
     global gpiopwm
     return simple_closure_handler(gpiopwm.turn_on)
 
 
-@app.route('/api/simple_off', methods=['POST'])
+@app.route('/api/simple_off', methods=['PUT', 'POST'])
 def simple_off_handler():
     global gpiopwm
     return simple_closure_handler(gpiopwm.turn_off)

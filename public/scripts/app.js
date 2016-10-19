@@ -12,13 +12,31 @@ var Gauge = React.createClass({
     return {currentValue: value}
   },
 
+  updateValue: function(value) {
+    this.setState(this.makeState(value))
+  },
+
   render: function() {
     return (
       <div className="Gauge">
-        <input type="range" min="0" max="255" step="1" defaultValue={this.state.currentValue} onInput={this.handleOnInput}></input>
+        <input type="range" min="0" max="255" step="1" defaultValue={this.state.currentValue} value={this.state.currentValue} onInput={this.handleOnInput}></input>
         <span className="valueDisplay">
           {this.state.currentValue}
         </span>
+      </div>
+    );
+  }
+});
+
+var OnOffButton = React.createClass({
+  handleClick: function(event) {
+    this.props.onClick();
+  },
+
+  render: function() {
+    return (
+      <div className="Button">
+        <input type="button" onClick={this.handleClick} value={this.props.label}></input>
       </div>
     );
   }
@@ -31,6 +49,14 @@ var RgbControl = React.createClass({
   },
 
   componentWillMount: function() {
+    this.getLiveState();
+  },
+
+  makeState: function(r, g, b) {
+    return {r: r, g: g, b: b}
+  },
+
+  getLiveState: function() {
     $.ajax({
       url: this.props.url,
       dataType: 'json',
@@ -43,10 +69,6 @@ var RgbControl = React.createClass({
         console.error(this.props.url, status, err.toString());
       }.bind(this)
     });
-  },
-
-  makeState: function(r, g, b) {
-    return {r: r, g: g, b: b}
   },
 
   handleGaugeUpdateR: function(value) {
@@ -81,17 +103,48 @@ var RgbControl = React.createClass({
     });
   },
 
+  handleOnButtonClick: function(data) {
+    this.handleOnOffButtonClick(this.props.onUrl);
+  },
+
+  handleOffButtonClick: function(data) {
+    this.handleOnOffButtonClick(this.props.offUrl);
+  },
+
+  handleOnOffButtonClick: function(urlToHit) {
+    $.ajax({
+      url: urlToHit,
+      dataType: 'json',
+      type: 'PUT',
+      success: function(data) {
+        this.getLiveState()
+        this.refs.rSlider.updateValue(this.state['r']);
+        this.refs.gSlider.updateValue(this.state['g']);
+        this.refs.bSlider.updateValue(this.state['b']);
+      }.bind(this),
+      error: function(xhr, status, err) {
+        console.error(this.props.url, status, err.toString());
+      }.bind(this)
+    });
+  },
+
   render: function() {
     return (
       <div className="RgbControl">
         <div className="R">
-          <Gauge onValueUpdate={this.handleGaugeUpdateR} colorVal={this.state['r']} />
+          <Gauge ref="rSlider" onValueUpdate={this.handleGaugeUpdateR} colorVal={this.state['r']} />
         </div>
         <div className="G">
-          <Gauge onValueUpdate={this.handleGaugeUpdateG} colorVal={this.state['g']} />
+          <Gauge ref="gSlider" onValueUpdate={this.handleGaugeUpdateG} colorVal={this.state['g']} />
         </div>
         <div className="B">
-          <Gauge onValueUpdate={this.handleGaugeUpdateB} colorVal={this.state['b']} />
+          <Gauge ref="bSlider" onValueUpdate={this.handleGaugeUpdateB} colorVal={this.state['b']} />
+        </div>
+        <div className="on">
+          <OnOffButton onClick={this.handleOnButtonClick} label='on'/>
+        </div>
+        <div className="off">
+          <OnOffButton onClick={this.handleOffButtonClick} label='off'/>
         </div>
       </div>
     );
@@ -100,6 +153,6 @@ var RgbControl = React.createClass({
 
 
 ReactDOM.render(
-  <RgbControl url='/api/rgb'/>,
+  <RgbControl url='/api/rgb' onUrl='/api/simple_on' offUrl='/api/simple_off'/>,
   document.getElementById('content')
 );
