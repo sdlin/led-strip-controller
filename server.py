@@ -54,7 +54,7 @@ class GpioPwm(object):
         self.b = value
 
     def fade_rgb(self, r_value, g_value, b_value):
-        time_period_secs = 0.03
+        time_period_secs = 0.02
         P = 0.4
         prev_r = None
         prev_g = None
