@@ -3,6 +3,7 @@ from flask import Flask, Response, request
 import json
 import os
 import pigpio
+from time import sleep
 
 app = Flask(__name__, static_url_path='', static_folder='public')
 app.add_url_rule('/', 'root', lambda: app.send_static_file('index.html'))
@@ -25,7 +26,7 @@ class GpioPwm(object):
         self.last_b = 255
         self.state = 'off'
 
-    def set_rgb(self, r_value, g_value, b_value, reset=True):
+    def set_rgb(self, r_value, g_value, b_value, reset=True, do_fade=True):
         if reset and r_value == 0 and g_value == 0 and b_value == 0:
             self.last_r = 255
             self.last_g = 255
@@ -33,9 +34,12 @@ class GpioPwm(object):
             self.state = 'off'
         elif self.state == 'off':
             self.state = 'on'
-        self.set_red(r_value)
-        self.set_green(g_value)
-        self.set_blue(b_value)
+        if do_fade is True:
+            self.fade_rgb(r_value, g_value, b_value)
+        else:
+            self.set_red(r_value)
+            self.set_green(g_value)
+            self.set_blue(b_value)
 
     def set_red(self, value):
         self._set_pin_value('r', value)
@@ -48,6 +52,33 @@ class GpioPwm(object):
     def set_blue(self, value):
         self._set_pin_value('b', value)
         self.b = value
+
+    def fade_rgb(self, r_value, g_value, b_value):
+        time_period_secs = 0.03
+        P = 0.4
+        prev_r = None
+        prev_g = None
+        prev_b = None
+        while prev_r != self.r or prev_g != self.g or prev_b != self.b:
+            r_error = r_value - self.r
+            g_error = g_value - self.g
+            b_error = b_value - self.b
+            r_next = round(self.r + P * r_error)
+            g_next = round(self.g + P * g_error)
+            b_next = round(self.b + P * b_error)
+
+            prev_r = self.r
+            prev_g = self.g
+            prev_b = self.b
+
+            self.set_red(r_next)
+            self.set_green(g_next)
+            self.set_blue(b_next)
+            sleep(time_period_secs)
+
+        self.set_red(r_value)
+        self.set_green(g_value)
+        self.set_blue(b_value)
 
     def turn_off(self):
         if self.state == 'off':
@@ -135,6 +166,11 @@ def make_rgb_response(r=255, g=255, b=255):
             'Access-Control-Allow-Origin': '*'
         }
     )
+
+
+def error(setpoint, current):
+    return setpoint - current
+
 
 if __name__ == '__main__':
     global gpiopwn

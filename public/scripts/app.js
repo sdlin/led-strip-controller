@@ -90,17 +90,7 @@ var RgbControl = React.createClass({
   },
 
   handleRgbUpdate: function(data) {
-    $.ajax({
-      url: this.props.url,
-      dataType: 'json',
-      type: 'PUT',
-      data: data,
-      success: function(data) {
-      }.bind(this),
-      error: function(xhr, status, err) {
-        console.error(this.props.url, status, err.toString());
-      }.bind(this)
-    });
+    RateLimitedUpdateRGB(this.props.url, data);
   },
 
   handleOnButtonClick: function(data) {
@@ -151,6 +141,46 @@ var RgbControl = React.createClass({
   }
 });
 
+// Modified From: https://jsfiddle.net/dandv/47cbj/
+function RateLimit(fn, delay, context) {
+  var queue = [], timer = null;
+  function processQueue() {
+    var item = queue.pop();
+    if (item)
+      queue = []
+      fn.apply(item.context, item.arguments);
+    if (queue.length === 0)
+      clearInterval(timer), timer = null;
+  }
+
+  return function limited() {
+    queue.push({
+      context: context || this,
+      arguments: [].slice.call(arguments)
+    });
+    if (!timer) {
+      processQueue();
+      timer = setInterval(processQueue, delay);
+    }
+  }
+}
+
+function updateRGB(url, data) {
+  $.ajax({
+    url: url,
+    dataType: 'json',
+    type: 'PUT',
+    data: data,
+    success: function(data) {
+    }.bind(this),
+    error: function(xhr, status, err) {
+      console.error(url, status, err.toString());
+    }.bind(this)
+  });
+}
+
+var updateMillis = 500;
+var RateLimitedUpdateRGB = RateLimit(updateRGB, updateMillis);
 
 ReactDOM.render(
   <RgbControl url='/api/rgb' onUrl='/api/simple_on' offUrl='/api/simple_off'/>,
