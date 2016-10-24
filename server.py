@@ -173,7 +173,7 @@ def error(setpoint, current):
 
 # Use brightness value to determine operating point for gain schedule
 def get_gain(v):
-    return 0.2 + 0.25 * float(v) / 255.0
+    return 0.1 + 0.3 * float(v) / 255.0
 
 
 if __name__ == '__main__':
