@@ -55,7 +55,6 @@ class GpioPwm(object):
 
     def fade_rgb(self, r_value, g_value, b_value):
         time_period_secs = 0.02
-        P = 0.4
         prev_r = None
         prev_g = None
         prev_b = None
@@ -63,9 +62,9 @@ class GpioPwm(object):
             r_error = r_value - self.r
             g_error = g_value - self.g
             b_error = b_value - self.b
-            r_next = round(self.r + P * r_error)
-            g_next = round(self.g + P * g_error)
-            b_next = round(self.b + P * b_error)
+            r_next = round(self.r + get_gain(self.r) * r_error)
+            g_next = round(self.g + get_gain(self.g) * g_error)
+            b_next = round(self.b + get_gain(self.b) * b_error)
 
             prev_r = self.r
             prev_g = self.g
@@ -170,6 +169,11 @@ def make_rgb_response(r=255, g=255, b=255):
 
 def error(setpoint, current):
     return setpoint - current
+
+
+# Use brightness value to determine operating point for gain schedule
+def get_gain(v):
+    return 0.2 + 0.25 * float(v) / 255.0
 
 
 if __name__ == '__main__':
