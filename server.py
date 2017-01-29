@@ -97,6 +97,20 @@ class GpioPwm(object):
             self.set_rgb(self.last_r, self.last_g, self.last_b)
             return 0
 
+    def delta_color(self, color, delta):
+        def limited_delta(v):
+            return min(max(v + delta, 0), 255)
+        if color == 'r':
+            args = [limited_delta(self.r), self.g, self.b]
+        elif color == 'g':
+            args = [self.r, limited_delta(self.g), self.b]
+        elif color == 'b':
+            args = [self.r, self.g, limited_delta(self.b)]
+        else:
+            return '{}'
+        self.set_rgb(*args)
+        return 'r: {}, g: {}, b: {}'.format(self.r, self.g, self.b)
+
     def _set_pin_value(self, color, value):
         pin = GpioPwm.rgb_to_pin[color]
         scaled_value = min([max([int(value), 0]), 255])
@@ -135,6 +149,22 @@ def simple_on_handler():
 def simple_off_handler():
     global gpiopwm
     return simple_closure_handler(gpiopwm.turn_off)
+
+
+@app.route('/api/delta_color', methods=['PUT'])
+def delta_color_handler():
+    global gpiopwm
+    color = request.form.get('color')
+    delta = int(request.form.get('delta'))
+    msg = gpiopwm.delta_color(color, delta)
+    return Response(
+        json.dumps(msg),
+        mimetype='application/json',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Access-Control-Allow-Origin': '*'
+        }
+    )
 
 
 def simple_closure_handler(func):
