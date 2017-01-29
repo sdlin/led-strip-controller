@@ -1,6 +1,7 @@
 """RGB Backend."""
 from flask import Flask, Response, request
 import json
+from math import ceil, floor
 import os
 import pigpio
 from time import sleep
@@ -10,6 +11,7 @@ app.add_url_rule('/', 'root', lambda: app.send_static_file('index.html'))
 
 
 class GpioPwm(object):
+    MAX_VAL = 255
     rgb_to_pin = {
         'r': 3,
         'g': 4,
@@ -21,16 +23,16 @@ class GpioPwm(object):
         self.r = 0
         self.g = 0
         self.b = 0
-        self.last_r = 255
-        self.last_g = 255
-        self.last_b = 255
+        self.last_r = GpioPwm.MAX_VAL
+        self.last_g = GpioPwm.MAX_VAL
+        self.last_b = GpioPwm.MAX_VAL
         self.state = 'off'
 
     def set_rgb(self, r_value, g_value, b_value, reset=True, do_fade=True):
         if reset and r_value == 0 and g_value == 0 and b_value == 0:
-            self.last_r = 255
-            self.last_g = 255
-            self.last_b = 255
+            self.last_r = GpioPwm.MAX_VAL
+            self.last_g = GpioPwm.MAX_VAL
+            self.last_b = GpioPwm.MAX_VAL
             self.state = 'off'
         elif self.state == 'off':
             self.state = 'on'
@@ -99,7 +101,7 @@ class GpioPwm(object):
 
     def delta_color(self, color, delta):
         def limited_delta(v):
-            return min(max(v + delta, 0), 255)
+            return min(max(v + delta, 0), GpioPwm.MAX_VAL)
         if color == 'r':
             args = [limited_delta(self.r), self.g, self.b]
         elif color == 'g':
@@ -109,11 +111,33 @@ class GpioPwm(object):
         else:
             return '{}'
         self.set_rgb(*args)
-        return 'r: {}, g: {}, b: {}'.format(self.r, self.g, self.b)
+
+    def scale_brightness(self, input_scale_factor):
+        input_scale_factor = min(max(input_scale_factor, -0.9), 0.9)
+        round_func = ceil
+        if input_scale_factor < 0:
+            round_func = floor
+        min_val = min([self.r, self.g, self.b])
+        max_val = max([self.r, self.g, self.b])
+        if input_scale_factor < 0 and min_val == 0:
+            return False
+        if input_scale_factor > 0 and max_val == GpioPwm.MAX_VAL:
+            return False
+        scale_factor = float(1.0 + input_scale_factor)
+        if max_val == 0:
+            r_des = min(max(round_func(1 + scale_factor), 1), GpioPwm.MAX_VAL)
+            g_des = min(max(round_func(1 + scale_factor), 1), GpioPwm.MAX_VAL)
+            b_des = min(max(round_func(1 + scale_factor), 1), GpioPwm.MAX_VAL)
+        else:
+            r_des = min(max(round_func(self.r * scale_factor), 1), GpioPwm.MAX_VAL)
+            g_des = min(max(round_func(self.g * scale_factor), 1), GpioPwm.MAX_VAL)
+            b_des = min(max(round_func(self.b * scale_factor), 1), GpioPwm.MAX_VAL)
+        self.fade_rgb(r_des, g_des, b_des)
+        return True
 
     def _set_pin_value(self, color, value):
         pin = GpioPwm.rgb_to_pin[color]
-        scaled_value = min([max([int(value), 0]), 255])
+        scaled_value = min([max([int(value), 0]), GpioPwm.MAX_VAL])
         self.pi.set_PWM_dutycycle(pin, scaled_value)
 
 
@@ -123,9 +147,9 @@ def rgb_handler():
     if request.method == 'GET':
         return make_rgb_response(gpiopwm.r, gpiopwm.g, gpiopwm.b)
     elif request.method == 'PUT':
-        r = int(request.form.get('r', 255))
-        g = int(request.form.get('g', 255))
-        b = int(request.form.get('b', 255))
+        r = int(request.form.get('r', GpioPwm.MAX_VAL))
+        g = int(request.form.get('g', GpioPwm.MAX_VAL))
+        b = int(request.form.get('b', GpioPwm.MAX_VAL))
         gpiopwm.set_rgb(r, g, b)
 
         msg = 'r: {}, g: {}, b: {}'.format(r, g, b)
@@ -156,7 +180,24 @@ def delta_color_handler():
     global gpiopwm
     color = request.form.get('color')
     delta = int(request.form.get('delta'))
-    msg = gpiopwm.delta_color(color, delta)
+    gpiopwm.delta_color(color, delta)
+    msg = 'r: {}, g: {}, b: {}'.format(gpiopwm.r, gpiopwm.g, gpiopwm.b)
+    return Response(
+        json.dumps(msg),
+        mimetype='application/json',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Access-Control-Allow-Origin': '*'
+        }
+    )
+
+
+@app.route('/api/scale_brightness', methods=['PUT'])
+def scale_brightness_handler():
+    global gpiopwm
+    scale = float(request.form.get('scale'))
+    gpiopwm.scale_brightness(scale)
+    msg = 'r: {}, g: {}, b: {}'.format(gpiopwm.r, gpiopwm.g, gpiopwm.b)
     return Response(
         json.dumps(msg),
         mimetype='application/json',
@@ -185,7 +226,7 @@ def simple_closure_handler(func):
     )
 
 
-def make_rgb_response(r=255, g=255, b=255):
+def make_rgb_response(r=GpioPwm.MAX_VAL, g=GpioPwm.MAX_VAL, b=GpioPwm.MAX_VAL):
     """Return response."""
     return Response(
         json.dumps({'r': r, 'g': g, 'b': b}),
@@ -203,7 +244,7 @@ def error(setpoint, current):
 
 # Use brightness value to determine operating point for gain schedule
 def get_gain(v):
-    return 0.1 + 0.3 * float(v) / 255.0
+    return 0.1 + 0.3 * float(v) / GpioPwm.MAX_VAL
 
 
 if __name__ == '__main__':
